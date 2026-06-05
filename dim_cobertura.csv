@@ -1,0 +1,5 @@
+﻿ID_Cobertura,Nombre_Cobertura,Descripcion,Orden
+COB01,Amplia,Daños propios + RC + robo total,1
+COB02,Limitada,Daños propios + robo total,2
+COB03,Responsabilidad Civil,Solo daños a terceros,3
+COB04,Robo Total,Solo robo total del vehículo,4

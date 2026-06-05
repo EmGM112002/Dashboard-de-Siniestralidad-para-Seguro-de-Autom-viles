@@ -1,0 +1,351 @@
+// ============================================================
+//  PORTAFOLIO ACTUARIAL — Proyecto 02: Power BI + DAX
+//  Dashboard de Siniestralidad — Seguro de Automóviles
+//
+//  INSTRUCCIONES:
+//  1. En Power BI Desktop, crear una tabla vacía llamada "_Medidas"
+//     (Modelado → Nueva tabla → _Medidas = {""})
+//  2. Crear cada medida dentro de esa tabla
+//  3. Organizar en carpetas usando el prefijo del nombre
+// ============================================================
+
+
+// ════════════════════════════════════════════════════════════
+//  SECCIÓN 1 — MEDIDAS BASE
+// ════════════════════════════════════════════════════════════
+
+// ── Total de siniestros pagados ──────────────────────────────
+Siniestros_Pagados =
+CALCULATE(
+    SUM( FactSiniestros[Monto_Pagado] ),
+    FactSiniestros[Estado] = "Pagado"
+)
+
+// ── Total de montos reclamados ───────────────────────────────
+Monto_Reclamado_Total =
+CALCULATE(
+    SUM( FactSiniestros[Monto_Reclamado] ),
+    FactSiniestros[Estado] <> "Rechazado"
+)
+
+// ── Número de siniestros (excluye rechazados) ────────────────
+Num_Siniestros =
+COUNTROWS(
+    FILTER(
+        FactSiniestros,
+        FactSiniestros[Estado] <> "Rechazado"
+    )
+)
+
+// ── Número de siniestros pagados ─────────────────────────────
+Num_Siniestros_Pagados =
+CALCULATE(
+    COUNTROWS( FactSiniestros ),
+    FactSiniestros[Estado] = "Pagado"
+)
+
+// ── Número de siniestros en proceso ──────────────────────────
+Num_En_Proceso =
+CALCULATE(
+    COUNTROWS( FactSiniestros ),
+    FactSiniestros[Estado] = "En proceso"
+)
+
+// ── Número de pólizas activas ────────────────────────────────
+Num_Polizas =
+COUNTROWS( FactPolizas )
+
+// ── Prima emitida total ──────────────────────────────────────
+Prima_Emitida =
+SUM( FactPolizas[Prima_Emitida] )
+
+// ── Prima devengada (proporcional a días de cobertura en el filtro)
+Prima_Devengada =
+SUMX(
+    FactPolizas,
+    VAR f_ini   = FactPolizas[Fecha_Inicio]
+    VAR f_fin   = FactPolizas[Fecha_Fin]
+    VAR f_desde = MAX( f_ini, CALCULATE( MIN( DimFecha[Fecha] ) ) )
+    VAR f_hasta = MIN( f_fin, CALCULATE( MAX( DimFecha[Fecha] ) ) )
+    VAR dias_dev = DATEDIFF( f_desde, f_hasta, DAY )
+    VAR dias_tot = DATEDIFF( f_ini, f_fin, DAY )
+    RETURN
+        IF(
+            dias_dev > 0 && dias_tot > 0,
+            FactPolizas[Prima_Emitida] * DIVIDE( dias_dev, dias_tot, 0 ),
+            0
+        )
+)
+
+// ── Exposición en vehículos-año ──────────────────────────────
+Exposicion_VA =
+SUMX(
+    FactPolizas,
+    VAR dias = DATEDIFF( FactPolizas[Fecha_Inicio], FactPolizas[Fecha_Fin], DAY )
+    RETURN DIVIDE( dias, 365, 0 )
+)
+
+// ── Valor medio del vehículo asegurado ───────────────────────
+Valor_Medio_Vehiculo =
+AVERAGE( FactPolizas[Valor_Vehiculo] )
+
+
+// ════════════════════════════════════════════════════════════
+//  SECCIÓN 2 — INDICADORES ACTUARIALES CLAVE
+// ════════════════════════════════════════════════════════════
+
+// ── Loss Ratio ───────────────────────────────────────────────
+Loss_Ratio =
+DIVIDE(
+    [Siniestros_Pagados],
+    [Prima_Devengada],
+    0
+)
+
+// ── Frecuencia de siniestros (por vehículo-año) ──────────────
+Frecuencia =
+DIVIDE(
+    [Num_Siniestros],
+    [Exposicion_VA],
+    0
+)
+
+// ── Severidad (costo medio por siniestro) ────────────────────
+Severidad =
+DIVIDE(
+    [Siniestros_Pagados],
+    [Num_Siniestros_Pagados],
+    0
+)
+
+// ── Prima pura (burning cost por vehículo-año) ───────────────
+Prima_Pura =
+DIVIDE(
+    [Siniestros_Pagados],
+    [Exposicion_VA],
+    0
+)
+
+// ── Tasa de rechazo de siniestros ────────────────────────────
+Tasa_Rechazo =
+DIVIDE(
+    CALCULATE( COUNTROWS( FactSiniestros ), FactSiniestros[Estado] = "Rechazado" ),
+    COUNTROWS( FactSiniestros ),
+    0
+)
+
+// ── Ratio de pago (monto pagado / monto reclamado) ───────────
+Ratio_Pago =
+DIVIDE(
+    [Siniestros_Pagados],
+    [Monto_Reclamado_Total],
+    0
+)
+
+// ── Cobertura de reserva (siniestros en proceso / pagados) ───
+Cobertura_Reserva =
+DIVIDE(
+    [Num_En_Proceso],
+    [Num_Siniestros_Pagados],
+    0
+)
+
+
+// ════════════════════════════════════════════════════════════
+//  SECCIÓN 3 — TIME INTELLIGENCE
+// ════════════════════════════════════════════════════════════
+
+// ── Loss Ratio acumulado en el año (YTD) ────────────────────
+Loss_Ratio_YTD =
+CALCULATE(
+    [Loss_Ratio],
+    DATESYTD( DimFecha[Fecha] )
+)
+
+// ── Siniestros pagados YTD ───────────────────────────────────
+Siniestros_YTD =
+CALCULATE(
+    [Siniestros_Pagados],
+    DATESYTD( DimFecha[Fecha] )
+)
+
+// ── Loss Ratio móvil 12 meses ────────────────────────────────
+Loss_Ratio_12M =
+CALCULATE(
+    [Loss_Ratio],
+    DATESINPERIOD(
+        DimFecha[Fecha],
+        LASTDATE( DimFecha[Fecha] ),
+        -12,
+        MONTH
+    )
+)
+
+// ── Loss Ratio mismo período año anterior ────────────────────
+Loss_Ratio_AA =
+CALCULATE(
+    [Loss_Ratio],
+    SAMEPERIODLASTYEAR( DimFecha[Fecha] )
+)
+
+// ── Variación del Loss Ratio vs. año anterior ────────────────
+LR_Variacion_AA =
+VAR lr_actual   = [Loss_Ratio]
+VAR lr_anterior = [Loss_Ratio_AA]
+RETURN
+    DIVIDE( lr_actual - lr_anterior, lr_anterior, BLANK() )
+
+// ── Siniestros pagados mismo período año anterior ────────────
+Siniestros_AA =
+CALCULATE(
+    [Siniestros_Pagados],
+    SAMEPERIODLASTYEAR( DimFecha[Fecha] )
+)
+
+// ── Variación de siniestros vs. año anterior ─────────────────
+Siniestros_Variacion_AA =
+DIVIDE(
+    [Siniestros_Pagados] - [Siniestros_AA],
+    [Siniestros_AA],
+    BLANK()
+)
+
+// ── Frecuencia por fecha de reporte (usa relación inactiva) ──
+Frecuencia_Por_Reporte =
+CALCULATE(
+    [Frecuencia],
+    USERELATIONSHIP( DimFecha[Fecha], FactSiniestros[Fecha_Reporte] )
+)
+
+
+// ════════════════════════════════════════════════════════════
+//  SECCIÓN 4 — RESERVAS E IBNR
+// ════════════════════════════════════════════════════════════
+
+// ── Rezago promedio de reporte (días) ────────────────────────
+Rezago_Reporte_Dias =
+AVERAGEX(
+    FILTER(
+        FactSiniestros,
+        FactSiniestros[Fecha_Reporte] <> BLANK()
+    ),
+    DATEDIFF(
+        FactSiniestros[Fecha_Ocurrencia],
+        FactSiniestros[Fecha_Reporte],
+        DAY
+    )
+)
+
+// ── Rezago promedio de pago (días desde ocurrencia) ──────────
+Rezago_Pago_Dias =
+AVERAGEX(
+    FILTER(
+        FactSiniestros,
+        FactSiniestros[Estado] = "Pagado"
+    ),
+    DATEDIFF(
+        FactSiniestros[Fecha_Ocurrencia],
+        FactSiniestros[Fecha_Pago],
+        DAY
+    )
+)
+
+// ── Siniestros ocurridos en los últimos 90 días ──────────────
+Siniestros_Ult90 =
+CALCULATE(
+    [Siniestros_Pagados],
+    FILTER(
+        FactSiniestros,
+        DATEDIFF( FactSiniestros[Fecha_Ocurrencia], TODAY(), DAY ) <= 90
+    )
+)
+
+// ── IBNR estimado (método factor de cola) ────────────────────
+//    Factor cola = 0.85 → a 90 días se reportó el 85% del total
+IBNR_Estimado =
+VAR sin_ult90   = [Siniestros_Ult90]
+VAR factor_cola = 0.85
+RETURN
+    DIVIDE( sin_ult90, factor_cola, 0 ) - sin_ult90
+
+// ── Siniestros en proceso (reserva RBNS) ─────────────────────
+//    RBNS = Reported But Not Settled
+RBNS =
+CALCULATE(
+    SUM( FactSiniestros[Monto_Reclamado] ),
+    FactSiniestros[Estado] = "En proceso"
+)
+
+// ── Reserva total estimada (RBNS + IBNR) ─────────────────────
+Reserva_Total =
+[RBNS] + [IBNR_Estimado]
+
+
+// ════════════════════════════════════════════════════════════
+//  SECCIÓN 5 — AUXILIARES Y FORMATO
+// ════════════════════════════════════════════════════════════
+
+// ── Semáforo de rentabilidad ─────────────────────────────────
+Semaforo_LR =
+VAR lr = [Loss_Ratio]
+RETURN
+    SWITCH(
+        TRUE(),
+        lr < 0.60, "🟢  Rentable",
+        lr < 0.80, "🟡  Vigilancia",
+        "🔴  Acción requerida"
+    )
+
+// ── Etiqueta compuesta para tarjetas ─────────────────────────
+LR_Label =
+FORMAT( [Loss_Ratio], "0.0%" )
+    & "  |  "
+    & FORMAT( [Siniestros_Pagados], "$#,##0" )
+
+// ── Frecuencia formateada por mil ────────────────────────────
+Frecuencia_x1000 =
+[Frecuencia] * 1000
+
+// ── Loss Ratio como número para formato condicional ──────────
+LR_Numerico =
+[Loss_Ratio]
+
+// ── Comparación prima pura vs. prima de tarifa ───────────────
+Suficiencia_Tarifaria =
+DIVIDE(
+    [Prima_Pura],
+    [Prima_Devengada] / [Exposicion_VA],
+    0
+)
+
+// ── Rango de fechas activo (para títulos dinámicos) ──────────
+Rango_Fechas =
+FORMAT( MIN( DimFecha[Fecha] ), "MMM YYYY" )
+    & " — "
+    & FORMAT( MAX( DimFecha[Fecha] ), "MMM YYYY" )
+
+
+// ════════════════════════════════════════════════════════════
+//  TABLA DimFecha — DAX para crear la tabla de calendario
+//  Crear con: Modelado → Nueva tabla → pegar la fórmula
+// ════════════════════════════════════════════════════════════
+
+/*
+DimFecha =
+VAR fecha_inicio = DATE( 2022, 1, 1 )
+VAR fecha_fin    = DATE( 2024, 12, 31 )
+RETURN
+ADDCOLUMNS(
+    CALENDAR( fecha_inicio, fecha_fin ),
+    "Año",          YEAR( [Date] ),
+    "Mes_Num",      MONTH( [Date] ),
+    "Mes_Nombre",   FORMAT( [Date], "MMMM" ),
+    "Mes_Corto",    FORMAT( [Date], "MMM" ),
+    "Trimestre",    "T" & QUARTER( [Date] ),
+    "Semana",       WEEKNUM( [Date] ),
+    "Dia_Semana",   FORMAT( [Date], "DDDD" ),
+    "AñoMes",       FORMAT( [Date], "YYYY-MM" ),
+    "AñoTrim",      FORMAT( [Date], "YYYY" ) & "-T" & QUARTER( [Date] ),
+    "Es_Fin_Semana",IF( WEEKDAY( [Date], 2 ) >= 6, TRUE, FALSE )
+)
+*/

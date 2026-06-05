@@ -1,0 +1,6 @@
+﻿ID_Region,Nombre_Region,Estado_Referencia,Factor_Riesgo
+REG01,CDMX,Ciudad de México,1.3
+REG02,Norte,Nuevo León / Chihuahua,1.1
+REG03,Occidente,Jalisco / Guanajuato,1.0
+REG04,Sur,Oaxaca / Guerrero / Chiapas,0.85
+REG05,Centro,Puebla / Hidalgo / Morelos,0.95
