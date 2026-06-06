@@ -246,13 +246,3 @@ Tres problemas no triviales resueltos durante la implementación:
 - Ferrari, A., & Russo, M. (2019). *The Definitive Guide to DAX* (2nd ed.). Microsoft Press.
 
 ---
-
-## Portafolio completo
-
-| # | Proyecto | Herramientas | Estado |
-|---|---|---|---|
-| 01 | Calculadora de Primas de Vida | Excel · VBA | ✅ Completo |
-| 02 | Dashboard de Siniestralidad | Power BI · DAX | ✅ Completo |
-| 03 | Modelo GLM para Tarifación | Python · statsmodels | ✅ Completo |
-| 04 | Modelo de Riesgo Colectivo | R · actuar | 🔜 Próximo |
-| 05 | Análisis de Portafolio de Pólizas | SQL | 🔜 Próximo |
